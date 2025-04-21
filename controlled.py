@@ -7,6 +7,8 @@ import time
 import multiprocessing
 import waveplayer
 import sys
+import subprocess
+import os
 
 HOST = ''
 PORT = 50008
@@ -127,6 +129,12 @@ def await_interupt():
             if byte & 1:
                 stop_execution()
                 print("Stopping execution from button press")
+            if byte & 2:
+                os.system("git pull")
+                with open(__file__) as fself:
+                    new_process = multiprocessing.Process(target=exec, args=[fself.read()])
+                    new_process.start()
+                quick_exit()
             if byte & 4:
                 stop_music()
                 print("Stopping music from button press")

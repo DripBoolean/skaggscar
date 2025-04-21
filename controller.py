@@ -5,7 +5,7 @@ import sys
 import time
 
 
-HOST = '206.21.94.178'
+HOST = '206.21.94.178' # To connect to
 PORT = 50008
 
 connected = False
@@ -210,7 +210,6 @@ def execute_command():
         with open(argument, "a") as f:
             for line in log_text:
                 f.write(line + "\n")
-
     else:
         log("Invalid Command!")
 
