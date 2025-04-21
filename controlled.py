@@ -268,6 +268,8 @@ if not picobot_api.init():
     print("Failed to init, exiting")
     sys.exit()
 
+print("Starting threads")
+
 status_update_thread = threading.Thread(target=update_status)
 status_update_thread.daemon = True
 status_update_thread.start()
