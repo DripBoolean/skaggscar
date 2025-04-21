@@ -4,11 +4,12 @@ import curses
 import sys
 import time
 
+
 HOST = '206.21.94.178'
 PORT = 50008
 
 connected = False
-target_status = -1
+target_status = "UNKNOWN"
 target_debug_level = 0
 
 socket_connection = None
@@ -19,7 +20,8 @@ log_text = [""]
 input_text = ""
 
 def recieve_data():
-    global connected, socket_connection
+    global connected, socket_connection, target_status
+
     while connected:
         try:
             data = socket_connection.recv(1024)
@@ -27,7 +29,24 @@ def recieve_data():
                 disconnect()
                 log("Connection lost")
                 return
-            log(str(data, "ascii"))
+            
+            data_str = str(data, 'ascii')
+
+            for message in data_str.split("\n"):
+                split_data = message.split(":", 1)
+                if len(split_data) == 2:
+                    command, argument = split_data
+                else:
+                    command = split_data[0]
+                    argument = None
+                
+                if command == "STATUS":
+                    target_status = argument
+                
+                if command == "MSG":
+                    log(f"msg: {argument}")
+
+            #log(str(data, "ascii"))
         except Exception as e: 
             log("Error while recieving data: {}".format(str(e)))
             disconnect()
@@ -97,6 +116,8 @@ def execute_command():
     else:
         command, argument = split_text
 
+    
+
     if (command == "connect" or command == "cn"):
         if argument != None:
             log("connect does not require argument")
@@ -151,7 +172,7 @@ def execute_command():
             file = open(argument)
             content = file.read()
         except Exception as e:
-            print("Error: {}".format(str(e)))
+            log("Error: {}".format(str(e)))
             return
 
         log("Sending execute signal")
@@ -166,8 +187,12 @@ def execute_command():
 
         send_text("STOP:")
     elif (command == "playsound" or command == "play"):
+
         if argument == None:
-            argument == ""
+            argument = ""
+
+        if argument == "None":
+            log("WTF!!!?!?!?!?!?")
 
         log(f"Playing sound: {argument}")
             
@@ -176,6 +201,16 @@ def execute_command():
         log("Stopping sound")
 
         send_text("STOPSOUND:")
+    elif command == "log":
+        if argument == None:
+            argument = "log.txt"
+
+        log(f"Log saved to: {argument}")
+        
+        with open(argument, "a") as f:
+            for line in log_text:
+                f.write(line + "\n")
+
     else:
         log("Invalid Command!")
 
@@ -191,8 +226,10 @@ stdscr.keypad(True)
 
 # Executing Paused Error Await DEBUG ON/OFF  (NOT) CONNECTED
 
-curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)
-curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_RED)
+curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_GREEN) # GOOD
+curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_RED)   # BAD
+curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_WHITE) # INFO
+curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLACK)# FROM TARGET 
 
 input_thread = threading.Thread(target=process_input, kwargs={"screen": stdscr})
 input_thread.daemon = True
@@ -203,17 +240,36 @@ while not quit_called:
 
     stdscr.erase()
 
+    # Prints log messages
     for i, s in enumerate(reversed(log_text)):
         y_pos = max_y - i - 3
         if y_pos < 0:
             break
-
+        
+        if s.startswith("msg:"):
+            stdscr.addstr(y_pos, 0, s, curses.color_pair(4))
+            continue
         stdscr.addstr(y_pos, 0, s)
 
+    # Print status bar message
+    label_pos = 0
+    def add_label(text, color):
+        global label_pos
+
+        stdscr.addstr(max_y - 2, label_pos, text, color)
+        label_pos += len(text) + 3 # Adds a spacer
+
     if connected:
-        stdscr.addstr(max_y - 2, 0, " CONNECTED ", curses.color_pair(1))
+        add_label(" CONNECTED ", curses.color_pair(1))
+        add_label(f" STATUS: {target_status} ", curses.color_pair(3))
     else:
-        stdscr.addstr(max_y - 2, 0, " NOT CONNECTED ", curses.color_pair(2))
+        add_label(" NOT CONNECTED ", curses.color_pair(2))
+    
+    
+
+    #     stdscr.addstr(max_y - 2, 0, " CONNECTED ", curses.color_pair(1))
+    # else:
+    #     stdscr.addstr(max_y - 2, 0, " NOT CONNECTED ", curses.color_pair(2))
 
     stdscr.addstr(max_y - 1, 0, f"Command: {input_text}")
 
