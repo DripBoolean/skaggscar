@@ -26,34 +26,34 @@ def recieve_data():
 
     while connected:
         try:
-            data = socket_connection.recv(1024)
+            data = socket_connection.recv(4096)
             if not data:
                 disconnect()
                 log("Connection lost")
                 return
             
-            data_str = str(data, 'ascii')
-
-            for message in data_str.split("\n"):
-                split_data = message.split(":", 1)
+            #data_str = str(data, 'ascii')
+                
+            for message in data.split(b"\n"):
+                split_data = message.split(b":", 1)
                 if len(split_data) == 2:
                     command, argument = split_data
                 else:
                     command = split_data[0]
                     argument = None
                 
-                if command == "STATUS":
-                    target_status = argument
+                if command == b"STATUS":
+                    target_status = str(argument, "ascii")
                 
-                if command == "MSG":
-                    log(f"msg: {argument}")
+                if command == b"MSG":
+                    log(f"msg: {str(argument, "ascii")}")
 
-                if command == "IMG":
+                if command == b"IMG":
                     if argument == None:
                         log("Uhh we didn't get an image ig (This shouldn't happen)")
                         continue
 
-                    cv.imshow("We just got an image, we just got an image", pickle.loads(bytes(data[4:], 'ascii')))
+                    cv.imshow("We just got an image, we just got an image", pickle.loads(argument))
                     cv.waitKey()
 
                     pass

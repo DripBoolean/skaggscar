@@ -52,7 +52,9 @@ def msg(text):
     send_text(f"MSG:{text}")
 
 def img(image):
-    send_raw(b"IMG:" + pickle.dumps(image))
+    data = pickle.dumps(image)
+    msg(len(data))
+    send_raw(b"IMG:" + data)
 
 def stop_wheels():
     picobot_api.setMotorPower1(0)
@@ -227,7 +229,7 @@ def handle_recieved_data():
                 data = connection.recv(4096)
                 
                 if not data:
-                    print("Recieved empty package, dropping connection")
+                    print("Recieved disconnect message, dropping connection")
                     drop_connection()
                     break
             except Exception as e:
