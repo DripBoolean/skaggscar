@@ -29,6 +29,7 @@ def recieve_data():
             bytes_remaing = 0
             if bytes_remaing == 0:
                 header = socket_connection.recv(4)
+                log(f"Header: {str(header, 'ascii')}")
                 if not header:
                     disconnect()
                     log("Connection lost")
