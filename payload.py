@@ -9,6 +9,8 @@ capture.set(cv.CAP_PROP_FRAME_WIDTH, 240)
 
 ret, cap = capture.read()
 
+cap.resize(240, 320, 3)
+
 if ret:
     msg(cap.shape)
     msg(cap)

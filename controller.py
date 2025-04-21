@@ -26,13 +26,30 @@ def recieve_data():
 
     while connected:
         try:
-            data = socket_connection.recv(4096)
-            if not data:
-                disconnect()
-                log("Connection lost")
-                return
+            bytes_remaing = 0
+            if bytes_remaing == 0:
+                header = socket_connection.recv(4)
+                if not header:
+                    disconnect()
+                    log("Connection lost")
+                    return
+
+                if not header.isdigit():
+                    log("Recieved invalid packet")
+                else:
+                    bytes_remaing = int(str(header, 'ascii'))
+                continue
             
-            #data_str = str(data, 'ascii')
+            data = b""
+            while bytes_remaing > 0:
+                data += socket_connection.recv(bytes_remaing)
+                if not data:
+                    disconnect()
+                    log("Connection lost")
+                    return
+                
+                bytes_remaing -= len(data)
+            
                 
             for message in data.split(b"\n"):
                 split_data = message.split(b":", 1)
@@ -187,7 +204,7 @@ def execute_command():
             log("Error: {}".format(str(e)))
             return
 
-        log("Sending execute signal")
+        log(f"Sending payload: {argument}")
 
         send_text("EXECUTE:{}".format(content))
         # picobot_api.setLedColor(0, 255, 0, 0)
@@ -202,9 +219,6 @@ def execute_command():
 
         if argument == None:
             argument = ""
-
-        if argument == "None":
-            log("WTF!!!?!?!?!?!?")
 
         log(f"Playing sound: {argument}")
             
@@ -237,10 +251,10 @@ stdscr.keypad(True)
 
 # Executing Paused Error Await DEBUG ON/OFF  (NOT) CONNECTED
 
-curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_GREEN) # GOOD
-curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_RED)   # BAD
-curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_WHITE) # INFO
-curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLACK)# FROM TARGET 
+curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_GREEN)  # GOOD
+curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_RED)    # BAD
+curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_WHITE)  # INFO
+curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLACK) # FROM TARGET 
 
 input_thread = threading.Thread(target=process_input, kwargs={"screen": stdscr})
 input_thread.daemon = True
