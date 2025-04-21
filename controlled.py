@@ -132,7 +132,8 @@ def await_interupt():
             if byte & 2:
                 os.system("git pull")
                 with open(__file__) as fself:
-                    new_process = multiprocessing.Process(target=exec, args=[fself.read()])
+                    byte_code = compile(fself.read(), __file__, "exec")
+                    new_process = multiprocessing.Process(target=exec, args=[byte_code])
                     new_process.start()
                 quick_exit()
             if byte & 4:
