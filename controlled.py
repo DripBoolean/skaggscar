@@ -9,6 +9,7 @@ import waveplayer
 import sys
 import subprocess
 import os
+import pickle
 
 HOST = ''
 PORT = 50008
@@ -34,9 +35,24 @@ def send_text(text):
         connection.sendall(bytes(text + "\n", "ascii"))
     except Exception as e:
         print("Error sending text: {}".format(str(e)))
+
+def send_raw(data):
+    global connection, connected
+    
+    if not connected:
+        return
+    
+    try:
+        connection.sendall(data + b"\n")
+    except Exception as e:
+        print("Error sending text: {}".format(str(e)))
+
         
 def msg(text):
     send_text(f"MSG:{text}")
+
+def img(image):
+    send_raw(b"IMG:" + pickle.dumps(image))
 
 def stop_wheels():
     picobot_api.setMotorPower1(0)

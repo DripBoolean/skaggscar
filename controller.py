@@ -3,6 +3,8 @@ import threading
 import curses
 import sys
 import time
+import cv2 as cv
+import pickle
 
 
 HOST = '206.21.94.178' # To connect to
@@ -45,6 +47,16 @@ def recieve_data():
                 
                 if command == "MSG":
                     log(f"msg: {argument}")
+
+                if command == "IMG":
+                    if argument == None:
+                        log("Uhh we didn't get an image ig (This shouldn't happen)")
+                        continue
+
+                    cv.imshow("We just got an image, we just got an image", pickle.loads(bytes(data[4:], 'ascii')))
+                    cv.waitKey()
+
+                    pass
 
             #log(str(data, "ascii"))
         except Exception as e: 
@@ -273,7 +285,6 @@ while not quit_called:
     stdscr.addstr(max_y - 1, 0, f"Command: {input_text}")
 
     stdscr.refresh()
-
     
 sys.exit()
 
