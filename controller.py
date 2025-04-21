@@ -38,6 +38,7 @@ def recieve_data():
                 if not header.isdigit():
                     log("Recieved invalid packet")
                 else:
+                    log(f"Readsize: {bytes_remaing}")
                     bytes_remaing = int(str(header, 'ascii'))
                 continue
             
@@ -51,6 +52,7 @@ def recieve_data():
                 
                 bytes_remaing -= len(data)
             
+            log(f"got msg: {data}")
                 
             for message in data.split(b"\n"):
                 split_data = message.split(b":", 1)
