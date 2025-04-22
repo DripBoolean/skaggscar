@@ -52,15 +52,11 @@ def recieve_data():
                 log("Recieved empty packet")
                 continue
 
-            log(f"Packet size: {bytes_remaing}")
-            
             data = b""
             while bytes_remaing > 0:
-                data += recv(bytes_remaing)
-                
-                bytes_remaing -= len(data)
-
-            log(f"Data: {data}")
+                recieved_data = recv(min(bytes_remaing, 1024))
+                data += recieved_data
+                bytes_remaing -= len(recieved_data)
                 
             split_data = data.split(b":", 1)
             if len(split_data) == 2:
@@ -80,7 +76,7 @@ def recieve_data():
                     log("Uhh we didn't get an image ig (This shouldn't happen)")
                     continue
                 
-                log(f"Got img size, {len(argument)}")
+                log(f"Got img, size: {len(argument)}")
                 cv.imshow("We just got an image, we just got an image", pickle.loads(argument))
                 cv.waitKey()
 

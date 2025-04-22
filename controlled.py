@@ -43,13 +43,13 @@ def send_raw(data):
         return
     
     try:
-        connection.sendall(b"\n" + bytes(format(len(data), "08d"), 'ascii'))
-        bytes_remaining = len(data)
-        while bytes_remaining > 0:
-            sent_bytes = min(bytes_remaining, 1024)
-            connection.sendall(data[0:sent_bytes])
-            data = data[sent_bytes:]
-            bytes_remaining -= sent_bytes
+        connection.sendall(b"\n" + bytes(format(len(data), "08d") + data, 'ascii'))
+        # bytes_remaining = len(data)
+        # while bytes_remaining > 0:
+        #     sent_bytes = min(bytes_remaining, 1024)
+        #     connection.sendall(data[0:sent_bytes])
+        #     data = data[sent_bytes:]
+        #     bytes_remaining -= sent_bytes
     except Exception as e:
         print("Error sending bytes: {}".format(str(e)))
 
@@ -115,6 +115,7 @@ def exec_code(code, pipe):
     try:
         exec(code)
     except Exception as e:
+        msg(f"Error in execution: {e}")
         print(f"Error in execution: {e}")
         pipe.send("Error")
     
