@@ -24,7 +24,7 @@ upper_green = np.array([90,255,255])
 # mask for threshold on green (ask Hannah for threshold deets)
 mask = cv.inRange(hsv,lower_green,upper_green)
 street_vision = cv.bitwise_and(cap,cap,mask=mask) #what the car will see to drive
-car_vision = cv2.GaussianBlur(street_vision,(5,5),cv2.BORDER_DEFAULT)
+car_vision = cv.GaussianBlur(street_vision,(5,5),cv.BORDER_DEFAULT)
 center_point = [160,150]
 center = car_vision[center_point[0]][center_point[1]]
 horizon_point = [160,170]
