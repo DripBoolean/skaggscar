@@ -43,9 +43,9 @@ def send_raw(data):
         return
     
     try:
-        connection.sendall(b"\n" + bytes(format(len(data), "04d") + 1, 'ascii') + data)
+        connection.sendall(b"\n" + bytes(format(len(data) + 1, "04d"), 'ascii') + data)
     except Exception as e:
-        print("Error sending text: {}".format(str(e)))
+        print("Error sending bytes: {}".format(str(e)))
 
         
 def msg(text):

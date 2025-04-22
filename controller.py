@@ -21,36 +21,38 @@ quit_called = False
 log_text = [""]
 input_text = ""
 
+def recv(amount):
+    global connected, socket_connection
+    ret =socket_connection.recv(amount)
+    if not ret:
+        disconnect()
+        log("connection lost")
+    return ret
+
 def recieve_data():
     global connected, socket_connection, target_status
 
-    bytes_remaing = 0
+    
     while connected:
         try:
+            bytes_remaing = 0
+            while recv(1) != b"\n": # Waits for start of packet
+                pass
+                
+            header = recv(4) # Size of header info
+
+            if not header.isdigit():
+                log("Recieved invalid packet")
+                continue
+            else:
+                bytes_remaing = int(str(header, 'ascii'))
+            
             if bytes_remaing == 0:
-                while socket_connection.recv(1) != b"\n": # Clears the buffer until end of "packet"
-                        pass
-                header = socket_connection.recv(4)
-
-                if not header:
-                    disconnect()
-                    log("Connection lost")
-                    return
-
-                if not header.isdigit():
-                    log("Recieved invalid packet")
-                    
-                else:
-                    bytes_remaing = int(str(header, 'ascii'))
                 continue
             
             data = b""
             while bytes_remaing > 0:
-                data += socket_connection.recv(bytes_remaing)
-                if not data:
-                    disconnect()
-                    log("Connection lost")
-                    return
+                data += recv(bytes_remaing)
                 
                 bytes_remaing -= len(data)
                 
