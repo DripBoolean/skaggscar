@@ -43,7 +43,7 @@ def send_raw(data):
         return
     
     try:
-        connection.sendall(b"\n" + bytes(format(len(data), "08d") + data, 'ascii'))
+        connection.sendall(b"\n" + bytes(format(len(data), "08d"), 'ascii') + data)
         # bytes_remaining = len(data)
         # while bytes_remaining > 0:
         #     sent_bytes = min(bytes_remaining, 1024)
