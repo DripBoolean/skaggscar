@@ -15,8 +15,6 @@ lower_green = np.array([50,100,100])
 upper_green = np.array([90,255,255])
 mask = cv.inRange(hsv,lower_green,upper_green)
 car_vision = cv.bitwise_and(cap,cap,mask=mask)
+#sobelxy = cv2.Sobel(src=img_blur, ddepth=cv2.CV_64F, dx=1, dy=1, ksize=5)
 msg(cv.HoughLines(car_vision, 1 ,))
 img(car_vision)
-
-while True:
-    pass
