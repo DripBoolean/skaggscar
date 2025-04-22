@@ -39,15 +39,16 @@ def recieve_data():
             while recv(1) != b"\n": # Waits for start of packet
                 pass
                 
-            header = recv(4) # Size of header info
+            header = recv(8) # Size of header info
 
             if not header.isdigit():
-                log("Recieved invalid packet")
+                log(f"Recieved invalid packet: {header}")
                 continue
             else:
                 bytes_remaing = int(str(header, 'ascii'))
             
             if bytes_remaing == 0:
+                log("Recieved empty packet")
                 continue
             
             data = b""
@@ -55,6 +56,8 @@ def recieve_data():
                 data += recv(bytes_remaing)
                 
                 bytes_remaing -= len(data)
+
+            log(f"Data: {data}")
                 
             split_data = data.split(b":", 1)
             if len(split_data) == 2:
@@ -238,15 +241,20 @@ def execute_command():
 
         log(f"Log saved to: {argument}")
         
-        with open(argument, "a") as f:
+        with open(argument, "w") as f:
             for line in log_text:
                 f.write(line + "\n")
     else:
         log("Invalid Command!")
 
 def log(message):
-    if len(message) > 50: # Messages that are too long cause curses to crash
-        message = message[:50]
+    global max_x
+    message.replace("\n", "\\n")
+
+    if len(message) >= max_x: # Messages that are too long cause curses to crash
+        message = message[:max_x - 1]
+
+    
     log_text.append(message)
 
 stdscr = curses.initscr()
@@ -267,8 +275,9 @@ input_thread = threading.Thread(target=process_input, kwargs={"screen": stdscr})
 input_thread.daemon = True
 input_thread.start()
 
+max_y, max_x = stdscr.getmaxyx()
+
 while not quit_called:
-    max_y, max_x = stdscr.getmaxyx()
 
     stdscr.erase()
 
