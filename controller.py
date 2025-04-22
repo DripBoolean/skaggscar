@@ -5,6 +5,7 @@ import sys
 import time
 import cv2 as cv
 import pickle
+import numpy
 
 
 HOST = '206.21.94.178' # Address to connect to
@@ -24,7 +25,6 @@ input_text = ""
 def recv(amount):
     global connected, socket_connection
     ret =socket_connection.recv(amount)
-    log(str(ret, 'ascii'))
     if not ret:
         disconnect()
         log("connection lost")
@@ -51,6 +51,8 @@ def recieve_data():
             if bytes_remaing == 0:
                 log("Recieved empty packet")
                 continue
+
+            log(f"Packet size: {bytes_remaing}")
             
             data = b""
             while bytes_remaing > 0:
@@ -78,7 +80,7 @@ def recieve_data():
                     log("Uhh we didn't get an image ig (This shouldn't happen)")
                     continue
                 
-                log(f"Got img, {pickle.loads(argument)}")
+                log(f"Got img size, {len(argument)}")
                 cv.imshow("We just got an image, we just got an image", pickle.loads(argument))
                 cv.waitKey()
 
@@ -249,13 +251,7 @@ def execute_command():
         log("Invalid Command!")
 
 def log(message):
-    global max_x
-    message.replace("\n", "\\n")
-
-    if len(message) >= max_x: # Messages that are too long cause curses to crash
-        message = message[:max_x - 1]
-
-    
+    message = message.replace("\n", "\\n")
     log_text.append(message)
 
 stdscr = curses.initscr()
@@ -276,19 +272,24 @@ input_thread = threading.Thread(target=process_input, kwargs={"screen": stdscr})
 input_thread.daemon = True
 input_thread.start()
 
-max_y, max_x = stdscr.getmaxyx()
+
 
 while not quit_called:
 
     stdscr.erase()
+    max_y, max_x = stdscr.getmaxyx()
 
     # Prints log messages
     for i, s in enumerate(reversed(log_text)):
         y_pos = max_y - i - 3
         if y_pos < 0:
             break
+
+        if len(s) >= max_x: # Messages that are too long cause curses to crash
+                s = s[:max_x - 1]
         
         if s.startswith("msg:"):
+            
             stdscr.addstr(y_pos, 0, s, curses.color_pair(4))
             continue
         stdscr.addstr(y_pos, 0, s)
