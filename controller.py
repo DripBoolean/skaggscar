@@ -24,6 +24,7 @@ input_text = ""
 def recv(amount):
     global connected, socket_connection
     ret =socket_connection.recv(amount)
+    log(str(ret, 'ascii'))
     if not ret:
         disconnect()
         log("connection lost")
