@@ -69,7 +69,7 @@ def recieve_data():
                 target_status = str(argument, "ascii")
             
             if command == b"MSG":
-                log(f"msg: {str(argument, "ascii")}")
+                log(f"msg: {str(argument, 'ascii')}")
 
             if command == b"IMG":
                 if argument == None:
