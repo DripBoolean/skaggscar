@@ -32,7 +32,7 @@ def send_text(text):
         return
     
     try:
-        connection.sendall(bytes(f"{len(text) + 1:04d}{text}\n", "ascii"))
+        connection.sendall(bytes(f"\n{len(text) + 1:04d}{text}", "ascii"))
     except Exception as e:
         print("Error sending text: {}".format(str(e)))
 
@@ -43,7 +43,7 @@ def send_raw(data):
         return
     
     try:
-        connection.sendall(bytes(format(len(data) + 1, '04d')) + data + b"\n")
+        connection.sendall(bytes(b"\n" + format(len(data) + 1, '04d')) + data)
     except Exception as e:
         print("Error sending text: {}".format(str(e)))
 

@@ -7,7 +7,7 @@ import cv2 as cv
 import pickle
 
 
-HOST = '206.21.94.178' # To connect to
+HOST = '206.21.94.178' # Address to connect to
 PORT = 50008
 
 connected = False
@@ -24,12 +24,14 @@ input_text = ""
 def recieve_data():
     global connected, socket_connection, target_status
 
+    bytes_remaing = 0
     while connected:
         try:
-            bytes_remaing = 0
             if bytes_remaing == 0:
+                while socket_connection.recv(1) != b"\n": # Clears the buffer until end of "packet"
+                        pass
                 header = socket_connection.recv(4)
-                log(f"Header: {str(header, 'ascii')}")
+
                 if not header:
                     disconnect()
                     log("Connection lost")
@@ -37,8 +39,8 @@ def recieve_data():
 
                 if not header.isdigit():
                     log("Recieved invalid packet")
+                    
                 else:
-                    log(f"Readsize: {bytes_remaing}")
                     bytes_remaing = int(str(header, 'ascii'))
                 continue
             
@@ -51,32 +53,30 @@ def recieve_data():
                     return
                 
                 bytes_remaing -= len(data)
+                
+            split_data = data.split(b":", 1)
+            if len(split_data) == 2:
+                command, argument = split_data
+            else:
+                command = split_data[0]
+                argument = None
             
-            log(f"got msg: {data}")
-                
-            for message in data.split(b"\n"):
-                split_data = message.split(b":", 1)
-                if len(split_data) == 2:
-                    command, argument = split_data
-                else:
-                    command = split_data[0]
-                    argument = None
-                
-                if command == b"STATUS":
-                    target_status = str(argument, "ascii")
-                
-                if command == b"MSG":
-                    log(f"msg: {str(argument, "ascii")}")
+            if command == b"STATUS":
+                target_status = str(argument, "ascii")
+            
+            if command == b"MSG":
+                log(f"msg: {str(argument, "ascii")}")
 
-                if command == b"IMG":
-                    if argument == None:
-                        log("Uhh we didn't get an image ig (This shouldn't happen)")
-                        continue
+            if command == b"IMG":
+                if argument == None:
+                    log("Uhh we didn't get an image ig (This shouldn't happen)")
+                    continue
+                
+                log(f"Got img, {pickle.loads(argument)}")
+                cv.imshow("We just got an image, we just got an image", pickle.loads(argument))
+                cv.waitKey()
 
-                    cv.imshow("We just got an image, we just got an image", pickle.loads(argument))
-                    cv.waitKey()
-
-                    pass
+                pass
 
             #log(str(data, "ascii"))
         except Exception as e: 
@@ -243,6 +243,8 @@ def execute_command():
         log("Invalid Command!")
 
 def log(message):
+    if len(message) > 50: # Messages that are too long cause curses to crash
+        message = message[:50]
     log_text.append(message)
 
 stdscr = curses.initscr()
