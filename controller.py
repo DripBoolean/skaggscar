@@ -95,7 +95,8 @@ def send_text(text):
         return
     
     try:
-        socket_connection.sendall(bytes(text, "ascii"))
+        size = len(text)
+        socket_connection.sendall(b"\n" + bytes(format(size, "08d") + text, "ascii"))
     except Exception as e:
         log("Error while sending data: {}".format(str(e)))
 
