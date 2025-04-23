@@ -268,8 +268,6 @@ input_thread = threading.Thread(target=process_input, kwargs={"screen": stdscr})
 input_thread.daemon = True
 input_thread.start()
 
-
-
 while not quit_called:
 
     stdscr.erase()

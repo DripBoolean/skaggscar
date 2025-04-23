@@ -25,6 +25,13 @@ execution_pipe = None
 execution_running = False
 execution_errored = False
 
+def recv(amount):
+    global connected, socket_connection
+    ret =socket_connection.recv(amount)
+    if not ret:
+        drop_connection()
+    return ret
+
 def send_text(text):
     global connection, connected
     
@@ -233,7 +240,27 @@ def handle_recieved_data():
         while connected:
             print("Awaiting message...")
             try:
-                data = connection.recv(4096)
+                bytes_remaing = 0
+                while recv(1) != b"\n": # Waits for start of packet
+                    pass
+                    
+                header = recv(8) # Size of header info
+
+                if bytes_remaing == 0:
+                    print("Recieved empty packet")
+                    continue
+
+                data = b""
+                while bytes_remaing > 0:
+                    recieved_data = recv(min(bytes_remaing, 1024))
+                    data += recieved_data
+                    bytes_remaing -= len(recieved_data)
+
+                if not header.isdigit():
+                    print(f"Recieved invalid packet: {header}")
+                    continue
+                else:
+                    bytes_remaing = int(str(header, 'ascii'))
                 
                 if not data:
                     print("Recieved disconnect message, dropping connection")
