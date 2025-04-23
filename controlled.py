@@ -51,12 +51,6 @@ def send_raw(data):
     
     try:
         connection.sendall(b"\n" + bytes(format(len(data), "08d"), 'ascii') + data)
-        # bytes_remaining = len(data)
-        # while bytes_remaining > 0:
-        #     sent_bytes = min(bytes_remaining, 1024)
-        #     connection.sendall(data[0:sent_bytes])
-        #     data = data[sent_bytes:]
-        #     bytes_remaining -= sent_bytes
     except Exception as e:
         print("Error sending bytes: {}".format(str(e)))
 
@@ -246,15 +240,16 @@ def handle_recieved_data():
                     
                 header = recv(8) # Size of header info
 
-                if bytes_remaing == 0:
-                    print("Recieved empty packet")
-                    continue
-
+                
                 data = b""
                 while bytes_remaing > 0:
                     recieved_data = recv(min(bytes_remaing, 1024))
                     data += recieved_data
                     bytes_remaing -= len(recieved_data)
+
+                if bytes_remaing == 0:
+                    print("Recieved empty packet")
+                    continue
 
                 if not header.isdigit():
                     print(f"Recieved invalid packet: {header}")
