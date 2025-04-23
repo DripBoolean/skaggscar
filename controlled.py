@@ -26,8 +26,8 @@ execution_running = False
 execution_errored = False
 
 def recv(amount):
-    global connected, socket_connection
-    ret =socket_connection.recv(amount)
+    global connected, connection
+    ret =connection.recv(amount)
     if not ret:
         drop_connection()
     return ret
