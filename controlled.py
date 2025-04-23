@@ -240,16 +240,23 @@ def handle_recieved_data():
                     
                 header = recv(8) # Size of header info
 
+                if not header.isdigit():
+                    print(f"Recieved invalid packet: {header}")
+                    continue
+                else:
+                    bytes_remaing = int(str(header, 'ascii'))
                 
+                if bytes_remaing == 0:
+                    print("Recieved empty packet")
+                    continue
+
                 data = b""
                 while bytes_remaing > 0:
                     recieved_data = recv(min(bytes_remaing, 1024))
                     data += recieved_data
                     bytes_remaing -= len(recieved_data)
 
-                if bytes_remaing == 0:
-                    print("Recieved empty packet")
-                    continue
+                
 
                 if not header.isdigit():
                     print(f"Recieved invalid packet: {header}")
