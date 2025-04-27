@@ -16,13 +16,15 @@ tape_radius = 2.4
 axel_to_camera_distance = 15.1
 encoder_counts_per_revolution = 96 # From Docs
 vertical_fov = math.radians(25.0) # Messy Measurement, prolly wrong but close enough
-#horizontal_fov = math.radians(35.362) # Messy Measurement, prolly wrong but hopefully good enough
-search_radius = 4.0
+#horizontal_fov = math.radians(33.362) # Messy Measurement, prolly wrong but hopefully good enough
+search_radius = 2.0
 search_count = 30
 path_node_acceptance_radius = 1.0
 
 wheel_circumference = wheel_diameter * math.pi
 encoder_tick_distance = wheel_circumference / encoder_counts_per_revolution
+
+
 
 vehicle_position = [0.0, 0.0]
 vehicle_angle = 0.0
@@ -33,6 +35,9 @@ current_path = []
 
 camera_width = 800
 camera_height = 600
+
+min_camera_gx = camera_height_from_ground / math.tan(vertical_fov)
+horizontal_fov = (camera_width / camera_height) * vertical_fov
 
 running = True
 thread_errored = False
@@ -101,6 +106,33 @@ def add_ground_point(x, y):
             )
         )
 
+def clear_points_in_camera():
+    global ground_points, horizontal_fov, min_camera_gx, vehicle_position, vehicle_angle, axel_to_camera_distance
+    
+    O = vehicle_angle
+    x = vehicle_position[0] + axel_to_camera_distance * math.cos(O)
+    y = vehicle_position[1] + axel_to_camera_distance * math.sin(O)
+    
+    for i, point in enumerate(reversed(ground_points)):
+        dx = point.position[0] - x
+        dy = point.position[1] - y
+        
+        rO = math.atan2(dy, dx) + O
+        M = math.sqrt(dx ** 2 + dy ** 2)
+        
+        rx = M * math.cos(rO)
+        #ry = M * math.sin(rO)
+        
+        if rO > -horizontal_fov and rO < horizontal_fov and rx > min_camera_gx:
+            print(point)
+            ground_points.pop(len(ground_points) - i - 1)
+            
+            
+        
+        
+
+        
+
 def take_capture(show = False):
     global camera_width, camera_height
     capture = cv.VideoCapture(0)
@@ -110,20 +142,18 @@ def take_capture(show = False):
     ret, cap = capture.read()
 
     if ret:
-        cap.resize(camera_height, camera_width, 3)
+        clear_points_in_camera()
+        cap.resize(camera_height, camera_width, 3, refcheck=False)
         cap = np.flip(cap, 0)
         cap = np.flip(cap, 1)
         
         mask = cap.copy()
-        threshold = 30
 
-        print(mask.shape)
-        print(mask[0, 0])
         # Detect the color green (DAS)
         hsv = cv.cvtColor(cap,cv.COLOR_BGR2HSV)
         
         
-        lower_green = np.array([40,100,100]) # this is in HSV
+        lower_green = np.array([40,80,80]) # this is in HSV
         upper_green = np.array([70,255,255])
         # mask for threshold on green (ask Hannah for threshold deets)
         mask = cv.inRange(hsv,lower_green,upper_green)
@@ -208,6 +238,9 @@ def evaluate_space(x, y):
 def set_area_state(x, y, radius, explored=None, traversed=None):
     global ground_points
     for i in range(len(ground_points)):
+        if not math.sqrt(ground_points[i].position[0] ** 2 + ground_points[i].position[1] ** 2) < radius:
+            continue
+        
         if explored != None:
             ground_points[i].explored=explored
         if traversed != None:
@@ -219,43 +252,50 @@ def reset_evaluation():
     for i in range(len(ground_points)):
         ground_points[i].evaluted = False
         
-def generate_path():
-    global search_radius, ground_points, search_count, current_path
+def generate_next_path():
+    global search_radius, ground_points, search_count, current_path, vehicle_position
     
-    reset_evaluation()
+    #reset_evaluation()
+    current_search_count = search_count
     current_search_radius = search_radius
-    while True:
+    search_point = current_path[-1] if len(current_path) > 0 else vehicle_position
+    for _ in range(20):
         #print(current_search_radius)
         best = None
         best_value = 0
         
-        for i in range(search_count):
-            angle = 2 * math.pi * i / search_count
+        for i in range(current_search_count):
+            angle = 2 * math.pi * i / current_search_count
             
             x_pos = current_search_radius * math.cos(angle)
             y_pos = current_search_radius * math.sin(angle)
             
+            x_pos += search_point[0]
+            y_pos += search_point[1]
+            
             value = evaluate_space(x_pos, y_pos)
             
+            #print(x_pos, y_pos)
             if value > best_value:
                 best = (x_pos, y_pos)
                 
                 value = best_value
                 
         if best == None:
-            current_search_radius += 0.8
-            search_count += 4
+            current_search_radius += 3.0
+            print(f"No Best, Expanding to radius: {current_search_radius}")
+            current_search_count += 4
             continue
         
         set_area_state(*best, tape_radius, explored=True)
-        current_path = [best]
+        current_path.append(best)
         break
 
 def update_wheel_power():
     global vehicle_position, vehicle_angle, current_path
     
     if len(current_path) == 0:
-        print("No Path")
+        #print("No Path")
         picobot_api.setMotorPower1(0)
         picobot_api.setMotorPower2(0)
         return
@@ -292,8 +332,12 @@ def update_wheel_power():
             picobot_api.setMotorPower1(70)
             picobot_api.setMotorPower2(-70)
     else:
-        picobot_api.setMotorPower1(100)
-        picobot_api.setMotorPower2(100)
+        if angle_difference > 0:
+            picobot_api.setMotorPower1(90)
+            picobot_api.setMotorPower2(100)
+        else:
+            picobot_api.setMotorPower1(100)
+            picobot_api.setMotorPower2(90)
         
 
 def position_update_daemon():
@@ -345,28 +389,36 @@ reset_encoders()
 # generate_path()
 # print(current_path)
 
-take_capture(True)
+take_capture()
 print(ground_points)
-cv.waitKey()
-generate_path()
-print(current_path)
+take_capture()
+print(ground_points)
+#cv.waitKey()
+# generate_next_path()
+# generate_next_path()
+# generate_next_path()
+# generate_next_path()
+# generate_next_path()
+# generate_next_path()
+# print(current_path)
 
 position_update_thread = threading.Thread(target=position_update_daemon)
 position_update_thread.daemon = True
-position_update_thread.start()
+#position_update_thread.start()
 
 movement_execution_thread = threading.Thread(target=movement_execution_daemon)
 movement_execution_thread.daemon = True
-movement_execution_thread.start()
+#movement_execution_thread.start()
 
 #vehicle_angle = math.radians(90)
 
-
+#time.sleep(5)
+#print(vehicle_position)
 #cv.waitKey()
 #cv.imshow("window", photo())
 #cv.waitKey()
 #current_path = [(15, 15), (0, 0)]
-time.sleep(5)
+#time.sleep(5)
 # time.sleep(5)
 #print(vehicle_position)
 #print(math.degrees(vehicle_angle))
