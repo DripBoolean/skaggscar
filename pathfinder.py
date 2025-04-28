@@ -6,7 +6,40 @@ import numpy as np
 import threading
 import sys
 
-# All measurements are in cm and where measure using a ruler
+class GroundPoint:
+    def __init__(self, position = [0, 0]):
+        self.position = position
+        #self.spawn_time = time.time()
+        self.traversed = False
+        self.explored = False
+        
+    def __str__(self):
+        return f"{self.position}"
+    
+    def __repr__(self):
+        return self.__str__()
+
+class VehiclePoint:
+    def __init__(self, position = [0, 0], angle = 0):
+        global axel_to_camera_distance
+        self.position = position
+        self.angle = angle
+        self.spawn_time = time.time()
+        
+        self.camera_position = [0.0, 0.0]
+        self.camera_position[0] = position[0] + axel_to_camera_distance * math.cos(angle)
+        self.camera_position[1] = position[1] + axel_to_camera_distance * math.sin(angle)
+    
+    def age(self):
+        return time.time() - self.spawn_time
+        
+    def __str__(self):
+        return f"{self.position} *{self.angle} age: {self.age()}"
+    
+    def __repr__(self):
+        return self.__str__()
+
+# All measurements are in cm
 camera_height_from_ground = 4.2
 wheel_diameter = 8.2
 axel_distance = 10.7
@@ -14,21 +47,22 @@ tape_radius = 2.4
 axel_to_camera_distance = 15.1
 encoder_counts_per_revolution = 96 # From Docs
 vertical_fov = math.radians(25.0) # Messy Measurement, prolly wrong but close enough
-#horizontal_fov = math.radians(33.362) # Messy Measurement, prolly wrong but hopefully good enough
 search_radius = 2.0
 search_count = 30
 path_node_acceptance_radius = 1.0
+camera_latency = 0.3
+camera_polling_distance = 10 # Distance between pixels polled when taking photo
 
 wheel_circumference = wheel_diameter * math.pi
 encoder_tick_distance = wheel_circumference / encoder_counts_per_revolution
 
-vehicle_position = [0.0, 0.0]
-vehicle_camera_position = [axel_to_camera_distance, 0.0]
-vehicle_angle = 0.0
-
-# Array of 2-lists
+# Arrays of 2-lists
 ground_points = [] 
 current_path = []
+
+vehicle_history = [VehiclePoint([0, 0], 0.0)]
+
+current_target = None
 
 camera_width = 800
 camera_height = 600
@@ -41,21 +75,19 @@ horizontal_fov = (camera_width / camera_height) * vertical_fov
 running = True
 thread_errored = False
 
-# TODO: rename to ground point or world point or smth
-class AgedPoint:
-    def __init__(self, position = [0, 0]):
-        self.position = position
-        #self.spawn_time = time.time()
-        self.traversed = False
-        self.explored = False
-        
-    def __str__(self):
-        return f"{self.position}"
+
     
-    def __repr__(self):
-        return self.__str__()
-    
-def remote_control(use_camera=True, use_brain=False):
+
+def rectify_camera():
+    """ Uses pygame to flip cameras x and y (Cant be done in opencv as far as i know) """
+    import pygame.camera
+    pygame.camera.init()
+    cam = pygame.camera.Camera("/dev/video0", (800, 600), "RGB")
+    cam.start()
+    cam.set_controls(True, True, 50)
+    cam.stop()
+
+def remote_control(use_camera=True):
     import pygame
     pygame.init()
 
@@ -67,24 +99,20 @@ def remote_control(use_camera=True, use_brain=False):
         cam.set_controls(True, True, 50) # Flips and sets brightness
         ds=pygame.display.set_mode((800, 600))
         pygame.display.set_caption("Remote View")
-    elif use_brain:
+    else:
         ds=pygame.display.set_mode((600, 600))
         pygame.display.set_caption("BrainDisplay")
-    else:
-        ds=pygame.display.set_mode((10, 10))
-        pygame.display.set_caption("pg window")
         
     
     while True:
-        if use_camera or use_brain:
-            ds.fill((0,0,0))
-            if use_camera:
-                image = cam.get_image() #read camera in as a surface
-            if use_brain:
-                array = np.flip(np.swapaxes(show_brain(False), 0, 1), 2)
-                image = pygame.surfarray.make_surface(array)
-            ds.blit(image,(0,0))
-            pygame.display.update()
+        ds.fill((0,0,0))
+        if use_camera:
+            image = cam.get_image() #read camera in as a surface
+        else:
+            array = np.flip(np.swapaxes(show_brain(False), 0, 1), 2)
+            image = pygame.surfarray.make_surface(array)
+        ds.blit(image,(0,0))
+        pygame.display.update()
         
         pygame.event.pump()
         keys=pygame.key.get_pressed()
@@ -98,7 +126,7 @@ def remote_control(use_camera=True, use_brain=False):
             if movement_vector[1] != 0:
                 wheel_values = (100, 0)
             else:
-                wheel_values = (100, -100)
+                wheel_values = (80, -80)
         elif movement_vector[1] != 0:
             wheel_values = (100, 100)
             
@@ -110,16 +138,8 @@ def remote_control(use_camera=True, use_brain=False):
         picobot_api.setMotorPower1(wheel_values[0])
         picobot_api.setMotorPower2(wheel_values[1])
 
-
-def update_vehicle_angle(new_rotation):
-    global vehicle_position, vehicle_angle, axel_to_camera_distance, vehicle_camera_position
-    
-    vehicle_angle = new_rotation
-    vehicle_camera_position[0] = vehicle_position[0] + axel_to_camera_distance * math.cos(vehicle_angle)
-    vehicle_camera_position[1] = vehicle_position[1] + axel_to_camera_distance * math.sin(vehicle_angle)
-
 def show_brain(show=True):
-    global ground_points, vehicle_position, vehicle_camera_position
+    global ground_points, vehicle_history
     
     display = np.zeros((600, 600, 3))
     def to_coords(x, y):
@@ -139,37 +159,37 @@ def show_brain(show=True):
         display[y, x] = (255, 255, 255)
     
     
-    x, y = to_coords(*vehicle_position)
-    cx, cy = to_coords(*vehicle_camera_position)
+    x, y = to_coords(*vehicle_history[-1].position)
+    cx, cy = to_coords(*vehicle_history[-1].camera_position)
 
     cv.line(display, (x, y), (cx, cy), (255, 0, 0), 1)
     display[y, x] = (0, 0, 255)
     if show:
         if points_are_ommited:
             print("Points ommited in display")
-        print(f"Vehicle Position: {vehicle_position}")
-        print(f"Vehicle Angle: {vehicle_angle})")
+        print(f"Vehicle Position: {vehicle_history[-1].position}")
+        print(f"Vehicle Angle: {vehicle_history[-1].angle})")
         print(f"Number of points: {len(ground_points)}")
         print(f"Ground Points: {ground_points}")
         cv.imshow("PicoBrain", display)
     return display
     #cv.waitKey()
 
-def photo():
-    capture = cv.VideoCapture(0)
-    capture.set(cv.CAP_PROP_FRAME_WIDTH, camera_width)
-    capture.set(cv.CAP_PROP_FRAME_HEIGHT, camera_height)
 
-    ret, cap = capture.read()
+def get_dated_vehicle_point(age):
+    global vehicle_history
     
-    cap.resize(camera_height, camera_width, 3)
-    cap = np.flip(cap, 0)
-    cap = np.flip(cap, 1)
+    #def lerp(a, b, c):
+    #    return (b - a) * c
     
-    return cap
+    for point in reversed(vehicle_history):
+        if point.age() < age:
+            continue
+        return point
+    
 
 def add_ground_point(x, y):
-    global vertical_fov_tan, camera_width, camera_height, camera_height_from_ground, vehicle_angle, vehicle_position, ground_points, vehicle_camera_position, max_camera_gx
+    global vertical_fov_tan, camera_width, camera_height, camera_height_from_ground, camera_latency, ground_points, max_camera_gx
 
     center_x = camera_width / 2
     center_y = camera_height / 2
@@ -194,22 +214,24 @@ def add_ground_point(x, y):
     if gx > max_camera_gx:
         return
     
+    vehicle_point = get_dated_vehicle_point(camera_latency)
+    
     M = math.sqrt(gy ** 2 + gx ** 2)
-    O = math.atan2(gy, gx) + vehicle_angle
+    O = math.atan2(gy, gx) + vehicle_point.angle
 
     ground_points.append(
-        AgedPoint(
-            [M * math.cos(O) + vehicle_camera_position[0],
-             M * math.sin(O) + vehicle_camera_position[1]]
+        GroundPoint(
+            [M * math.cos(O) + vehicle_point.camera_position[0],
+             M * math.sin(O) + vehicle_point.camera_position[1]]
             )
         )
 
 def clear_points_in_camera():
-    global ground_points, horizontal_fov, min_camera_gx, vehicle_camera_position, vehicle_angle, max_camera_gx
+    global ground_points, horizontal_fov, min_camera_gx, vehicle_history, max_camera_gx, camera_polling_distance
     
-    O = vehicle_angle
-    x = vehicle_camera_position[0]
-    y = vehicle_camera_position[1]
+    O = vehicle_history[-1].angle
+    x = vehicle_history[-1].position[0]
+    y = vehicle_history[-1].position[1]
     removed = 0
     for i in reversed(range(len(ground_points))):
         point = ground_points[i]
@@ -235,31 +257,26 @@ def take_capture(show = False):
     capture.set(cv.CAP_PROP_FRAME_HEIGHT, camera_height)
 
     ret, cap = capture.read()
-    calculate_movement()
-    clear_points_in_camera()
 
     if ret:
-        
+        clear_points_in_camera()
         cap.resize(camera_height, camera_width, 3, refcheck=False)
-        cap = np.flip(cap, 0)
-        cap = np.flip(cap, 1)
         
         mask = cap.copy()
 
         # Detect the color green (DAS)
         hsv = cv.cvtColor(cap,cv.COLOR_BGR2HSV)
         
-        
-        lower_green = np.array([40,80,80]) # this is in HSV
+        lower_green = np.array([40,60,80]) # this is in HSV
         upper_green = np.array([70,255,255])
         # mask for threshold on green (ask Hannah for threshold deets)
         mask = cv.inRange(hsv,lower_green,upper_green)
         
         
-        for x in range(0, camera_width, 20):
-            for y in range(0, camera_height, 20):
+        for x in range(0, camera_width, camera_polling_distance):
+            for y in range(0, camera_height, camera_polling_distance):
                 if mask[y, x] == 255:
-                    #cap[y, x] = [0, 0, 255]
+                    cap[y, x] = [0, 0, 255]
                     add_ground_point(x, y)
         if show:
             cv.imshow("cap", cap)
@@ -293,9 +310,13 @@ def wheel_movement(A, B, X):
     return (S, b)
 
 def calculate_movement():
-    global encoder_tick_distance, axel_distance, vehicle_position, vehicle_angle
+    global encoder_tick_distance, axel_distance, vehicle_history
     e1 = picobot_api.readEncoder1()
     e2 = picobot_api.readEncoder2()
+    
+    if e1 == None or e2 == None:
+        print("Error reading encoder")
+        return
     
     e1r = e1 * encoder_tick_distance
     e2r = e2 * encoder_tick_distance
@@ -303,13 +324,13 @@ def calculate_movement():
     mag, b = wheel_movement(e1r, e2r, axel_distance)
     ang = b / 2
     
-    vehicle_position[0] += mag * math.cos(ang + vehicle_angle)
-    vehicle_position[1] += mag * math.sin(ang + vehicle_angle)
-    update_vehicle_angle(vehicle_angle + b)
+    previous_angle = vehicle_history[-1].angle
+    previous_position = vehicle_history[-1].position
+    previous_position[0] += mag * math.cos(ang + previous_angle)
+    previous_position[1] += mag * math.sin(ang + previous_angle)
+    vehicle_history.append(VehiclePoint(previous_position, previous_angle + b))
     
     reset_encoders()
-
-
 
 def reset_encoders():
     picobot_api.resetEncoder1()
@@ -392,7 +413,7 @@ def generate_path():
         break
 
 def update_wheel_power():
-    global vehicle_position, vehicle_angle, current_path
+    global vehicle_history, current_target
     
     if len(current_path) == 0:
         #print("No Path")
@@ -400,7 +421,9 @@ def update_wheel_power():
         picobot_api.setMotorPower2(0)
         return
     
-    target = current_path[0]
+    target = current_target
+    vehicle_position = vehicle_history[-1].position
+    vehicle_angle = vehicle_history[-1].angle
     
     target_relative_position = [target[0] - vehicle_position[0], target[1] - vehicle_position[1]]
     
@@ -462,9 +485,10 @@ def start_async_task(function_s, pause, name = "Task"):
             "name": name
             }
         )
-    
     thread.daemon = True
     thread.start()
+    
+    return thread
 
 def await_button():
     while picobot_api.readButtons() != 0:
@@ -478,12 +502,14 @@ if not picobot_api.init():
     sys.exit()
     
 reset_encoders()
-#start_async_task([calculate_movement], 0.05, "Movement Observation")
+rectify_camera()
+start_async_task([calculate_movement], 0.05, "Movement Observation")
 start_async_task([take_capture], 0.05, "Observation")
 
-remote_control(False, True)
-#take_capture()
-show_brain()
+#remote_control(False)
+#show_brain()
+take_capture(True)
+#show_brain()
 
 
 #running = False
