@@ -6,6 +6,71 @@ import numpy as np
 import threading
 import sys
 
+class VideoCaptureAsync:
+    def __init__(self, src=0, width=640, height=480):
+        self.src = src
+        self.cap = cv.VideoCapture(self.src)
+        self.cap.set(cv.CAP_PROP_FRAME_WIDTH, width)
+        self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, height)
+        self.grabbed, self.frame = self.cap.read()
+        self.started = False
+        self.read_lock = threading.Lock()
+
+    def set(self, var1, var2):
+        self.cap.set(var1, var2)
+
+    def start(self):
+        if self.started:
+            print('[!] Asynchroneous video capturing has already been started.')
+            return None
+        self.started = True
+        self.thread = threading.Thread(target=self.update, args=())
+        self.thread.start()
+        return self
+
+    def update(self):
+        while self.started:
+            grabbed, frame = self.cap.read()
+            with self.read_lock:
+                self.grabbed = grabbed
+                self.frame = frame
+
+    def read(self):
+        with self.read_lock:
+            frame = self.frame.copy()
+            grabbed = self.grabbed
+        return grabbed, frame
+
+    def stop(self):
+        self.started = False
+        self.thread.join()
+
+    def __exit__(self, exec_type, exc_value, traceback):
+        self.cap.release()
+
+class PygameVideoStream:
+    def __init__(self, path, width, height):
+        import pygame.camera
+        
+        self.width = width
+        self.height = height
+        pygame.camera.init()
+        self.cam = pygame.camera.Camera(path, (width, height), "RGB")
+        self.cam.start()
+        self.cam.set_controls(True, True, 50)
+    
+    def read(self):
+        out = np.zeros((self.height, self.width, 3), np.uint8)
+        img = self.cam.get_image()
+        for iy in range(self.height):
+            for ix in range(self.width):
+                pix = img.get_at((ix, iy))
+                out[iy, ix, 0] = int(pix.b)
+                out[iy, ix, 1] = int(pix.g)
+                out[iy, ix, 2] = int(pix.r)
+        return out
+        
+
 class GroundPoint:
     def __init__(self, position = [0, 0]):
         self.position = position
@@ -50,7 +115,7 @@ vertical_fov = math.radians(25.0) # Messy Measurement, prolly wrong but close en
 search_radius = 2.0
 search_count = 30
 path_node_acceptance_radius = 1.0
-camera_latency = 0.3
+camera_latency = 0.5
 camera_polling_distance = 10 # Distance between pixels polled when taking photo
 
 wheel_circumference = wheel_diameter * math.pi
@@ -67,9 +132,12 @@ current_target = None
 camera_width = 800
 camera_height = 600
 
+camera = VideoCaptureAsync("/dev/video0", camera_width, camera_height)
+camera.start()
+
 vertical_fov_tan = math.tan(vertical_fov)
 min_camera_gx = camera_height_from_ground / vertical_fov_tan
-max_camera_gx = 60.0
+max_camera_gx = 40.0
 horizontal_fov = (camera_width / camera_height) * vertical_fov
 
 running = True
@@ -247,20 +315,19 @@ def clear_points_in_camera(vehicle_point):
     print(f"Removed: {removed}")
 
 def take_capture(show = False):
-    global camera_width, camera_height
-    capture = cv.VideoCapture(0)
-    capture.set(cv.CAP_PROP_FRAME_WIDTH, camera_width)
-    capture.set(cv.CAP_PROP_FRAME_HEIGHT, camera_height)
+    global camera_width, camera_height, camera
+#     capture = cv.VideoCapture(0)
+#     capture.set(cv.CAP_PROP_FRAME_WIDTH, camera_width)
+#     capture.set(cv.CAP_PROP_FRAME_HEIGHT, camera_height)
 
-    ret, cap = capture.read()
-
+    ret, cap = camera.read()
+    
     if ret:
         vehicle_point = get_dated_vehicle_point(camera_latency)
-        #clear_points_in_camera(vehicle_point)
+        clear_points_in_camera(vehicle_point)
         cap.resize(camera_height, camera_width, 3, refcheck=False)
         
         mask = cap.copy()
-
         # Detect the color green (DAS)
         hsv = cv.cvtColor(cap,cv.COLOR_BGR2HSV)
         
@@ -310,7 +377,6 @@ def calculate_movement():
     global encoder_tick_distance, axel_distance, vehicle_history
     e1 = picobot_api.readEncoder1()
     e2 = picobot_api.readEncoder2()
-    print(e1, e2)
     
     if e1 == None or e2 == None:
         raise RuntimeError("Error reading encoder")
@@ -370,7 +436,7 @@ def reset_evaluation():
         ground_points[i].evaluted = False
         
 def generate_path():
-    global search_radius, ground_points, search_count, current_path, vehicle_position
+    global search_radius, ground_points, search_count, current_path, current_target
     
     #reset_evaluation()
     current_search_count = search_count
@@ -378,7 +444,6 @@ def generate_path():
     search_point = current_path[-1] if len(current_path) > 0 else vehicle_position
     
     for _ in range(20):
-        #print(current_search_radius)
         best = None
         best_value = 0
         
@@ -407,6 +472,7 @@ def generate_path():
         
         set_area_state(*best, tape_radius, explored=True)
         current_path = [best]
+        #current_target = best
         break
 
 def update_wheel_power():
@@ -500,8 +566,8 @@ if not picobot_api.init():
     
 reset_encoders()
 # rectify_camera()
-start_async_task([calculate_movement], 0.5, "Movement Observation")
-start_async_task([take_capture], 0.5, "Observation")
+start_async_task([calculate_movement, update_wheel_power], 0.05, "Movement Observation")
+start_async_task([take_capture, generate_path], 0.05, "Observation")
 # 
 remote_control(False)
 #show_brain()
